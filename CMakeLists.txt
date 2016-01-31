@@ -1,4 +1,4 @@
-cmake_minimum_required (VERSION 3.2)
+cmake_minimum_required (VERSION 2.8)
 project (rpi-event-monitor)
 
 file(GLOB_RECURSE SOURCES "src/*.cpp")
@@ -13,7 +13,7 @@ list(REMOVE_DUPLICATES INCLUDE_DIRS)
 
 find_package(PkgConfig)
 
-pkg_check_modules (CEC libcec>=3.0.0)
+pkg_check_modules (CEC libcec)
 pkg_check_modules (GLIB2 glib-2.0)
 pkg_check_modules (GIO2 gio-2.0)
 

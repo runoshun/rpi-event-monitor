@@ -1,7 +1,7 @@
 #include "cec_wrapper.h"
 #include "bluez_dbus.h"
 
-#include <cectypes.h>
+#include <cec.h>
 #include <glib.h>
 
 #include <iostream>
