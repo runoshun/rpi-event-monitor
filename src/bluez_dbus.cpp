@@ -25,22 +25,11 @@ namespace RpiEvtMon { namespace BluezDBus {
         delete t;
     }
 
-    void on_device_connected(t* t)
-    {
-        std::cout << "on_device_connect" << std::endl;
-    }
-
-    void on_device_disconnected(t* t)
-    {
-        std::cout << "on_device_disconnect" << std::endl;
-    }
-
     bool is_registered_device(GDBusProxy* proxy, std::vector<const char *> &addrs)
     {
         GVariant* variant = g_dbus_proxy_get_cached_property(proxy,"Address");
         gsize len;
         std::string dev_addr = g_variant_get_string(variant, &len);
-        std::cout << "proxy addr = " << dev_addr << std::endl;
 
         bool found = false;
         for(std::vector<const char*>::iterator it = addrs.begin(); it != addrs.end(); ++it)
@@ -52,7 +41,29 @@ namespace RpiEvtMon { namespace BluezDBus {
         }
 
         g_variant_unref(variant);
+
+        if(!found) {
+            std::cout << "connected unregistered device : " << dev_addr << std::endl;
+        }
         return found;
+    }
+
+    void run_command(t* t, gboolean is_connected)
+    {
+        const char* command;
+        if(g_variant_get_boolean(value)) {
+            command = bt->on_connect_command;
+        }
+        else {
+            command = bt->on_disconnect_command;
+        }
+        if(command != NULL) {
+            GError *err;
+            gboolean ret = g_spawn_command_line_async(command, &err);
+            if(!ret) {
+                std::cout << "can't spawn command, " << err->message << std::endl;
+            }
+        }
     }
 
     void on_properties_changed(GDBusProxy *proxy,
@@ -76,12 +87,7 @@ namespace RpiEvtMon { namespace BluezDBus {
 
                 bool registered = is_registered_device(proxy, bt->mac_addresses);
                 if(registered) {
-                    if(g_variant_get_boolean(value)) {
-                        on_device_connected(bt);
-                    }
-                    else {
-                        on_device_disconnected(bt);
-                    }
+                    run_command(bt, g_variant_get_boolean(value));
                 }
             }
         }
@@ -92,15 +98,15 @@ namespace RpiEvtMon { namespace BluezDBus {
         GError* err = NULL;
         GDBusConnection* system_bus = g_bus_get_sync(G_BUS_TYPE_SYSTEM, NULL, &err);
         GDBusObjectManager* bluez = g_dbus_object_manager_client_new_sync(
-                system_bus,
-                G_DBUS_OBJECT_MANAGER_CLIENT_FLAGS_NONE,
-                "org.bluez",
-                "/",
-                NULL,
-                NULL,
-                NULL,
-                NULL,
-                &err);
+                    system_bus,
+                    G_DBUS_OBJECT_MANAGER_CLIENT_FLAGS_NONE,
+                    "org.bluez",
+                    "/",
+                    NULL,
+                    NULL,
+                    NULL,
+                    NULL,
+                    &err);
 
         GList* objects = g_dbus_object_manager_get_objects(bluez);
         for(GList* p = objects; p != NULL; p = p->next) {
