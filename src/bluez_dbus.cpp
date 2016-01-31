@@ -51,11 +51,11 @@ namespace RpiEvtMon { namespace BluezDBus {
     void run_command(t* t, gboolean is_connected)
     {
         const char* command;
-        if(g_variant_get_boolean(value)) {
-            command = bt->on_connect_command;
+        if(is_connected) {
+            command = t->on_connect_command;
         }
         else {
-            command = bt->on_disconnect_command;
+            command = t->on_disconnect_command;
         }
         if(command != NULL) {
             GError *err;
