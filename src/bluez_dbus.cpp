@@ -25,22 +25,51 @@ namespace RpiEvtMon { namespace BluezDBus {
         delete t;
     }
 
-    void on_device_connect(GDBusProxy *proxy,
-                           GVariant   *changed_properties,
-                           GStrv       invalidated_properties,
-                           gpointer    user_data)
+    void on_device_connected(t* t)
+    {
+        std::cout << "on_device_connect" << std::endl;
+    }
+
+    void on_device_disconnected(t* t)
+    {
+        std::cout << "on_device_disconnect" << std::endl;
+    }
+
+    bool is_registered_device(GDBusProxy* proxy, std::vector<const char *> addrs)
+    {
+        return true;
+    }
+
+    void on_properties_changed(GDBusProxy *proxy,
+                               GVariant   *changed_properties,
+                               GStrv       invalidated_properties,
+                               gpointer    user_data)
     {
         t* bt = (t*) user_data;
 
-        std::cout << "on_device_connect(), invalidated_properties = " << invalidated_properties << std::endl;
-        /*
-    std::string path = object_path;
-        for(auto it = t->mac_addresses.begin(); it != t->mac_addresses.end(); it++) {
-            std::string mac = *it;
-            if(path.find(mac) != std::string::npos) {
+        if (g_variant_n_children (changed_properties) > 0)
+        {
+            GVariantIter iter;
+            const gchar *key;
+            GVariant *value;
+
+            g_variant_iter_init (&iter, changed_properties);
+            while (g_variant_iter_loop (&iter, "{sv}", &key, &value)) {
+                if(g_strcmp0("Connected", key) != 0) {
+                    continue;
+                }
+
+                bool registered = is_registered_device(proxy, bt->mac_addresses);
+                if(registered) {
+                    if(g_variant_get_boolean(value)) {
+                        on_device_connected(bt);
+                    }
+                    else {
+                        on_device_disconnected(bt);
+                    }
+                }
             }
         }
-        */
     }
 
     bool init(t* t)
@@ -63,7 +92,7 @@ namespace RpiEvtMon { namespace BluezDBus {
             GDBusObject* obj = (GDBusObject*)p->data;
             GDBusInterface* idevice = g_dbus_object_get_interface(obj, "org.bluez.Device1");
             if(idevice != NULL) {
-                g_signal_connect(idevice, "g-properties-changed", G_CALLBACK(on_device_connect), t);
+                g_signal_connect(idevice, "g-properties-changed", G_CALLBACK(on_properties_changed), t);
             }
             g_object_unref(obj);
         }
