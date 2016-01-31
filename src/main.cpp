@@ -11,20 +11,28 @@ using namespace RpiEvtMon;
 typedef struct options {
     gchar* on_cec_activated;
     gchar* on_cec_deactivated;
+    gchar* on_bt_connected;
+    gchar* on_bt_disconnected;
+    gchar** bt_devices;
     gboolean  verbose;
 } options_t;
 
 gboolean parse_options(int* argc, char* argv[], options_t* options)
 {
     GOptionEntry option_entries[] = {
-        { "on-cec-activated",   'a', 0, G_OPTION_ARG_STRING, &(options->on_cec_activated),   "Execute COMMAND on cec source activated event", "COMMAND" },
-        { "on-cec-deactivated", 'd', 0, G_OPTION_ARG_STRING, &(options->on_cec_deactivated), "Execute COMMAND on cec source deactivated event", "COMMAND" },
-        { "verbose",            0,   0, G_OPTION_ARG_NONE,   &(options->verbose),            "Enable verbose mode", NULL },
+        { "on-cec-activated",   'a', 0, G_OPTION_ARG_STRING,      &(options->on_cec_activated),   "Execute COMMAND on cec source activated event", "COMMAND" },
+        { "on-cec-deactivated", 'z', 0, G_OPTION_ARG_STRING,      &(options->on_cec_deactivated), "Execute COMMAND on cec source deactivated event", "COMMAND" },
+        { "on-bt-connected",    'c', 0, G_OPTION_ARG_STRING,      &(options->on_bt_connected),    "Execute COMMAND on bluetooth device connected", "COMMAND" },
+        { "on-bt-disconnected", 'x', 0, G_OPTION_ARG_STRING,      &(options->on_bt_disconnected), "Execute COMMAND on bluetooth device disconnected", "COMMAND" },
+        { "bt-device",          'b', 0, G_OPTION_ARG_STRING_ARRAY,&(options->bt_devices),         "Add bluetooth device mac address to monitoring", "MAC_ADDR" },
+        { "verbose",            0,   0, G_OPTION_ARG_NONE,        &(options->verbose),            "Enable verbose mode", NULL },
         { NULL }
     };
 
     options->on_cec_activated = NULL;
     options->on_cec_deactivated = NULL;
+    options->on_bt_connected = NULL;
+    options->on_bt_disconnected = NULL;
     options->verbose = FALSE;
 
     GError *error = NULL;
@@ -39,6 +47,11 @@ gboolean parse_options(int* argc, char* argv[], options_t* options)
     }
 
     return TRUE;
+}
+
+void desotoy_options(options_t* options)
+{
+    g_strfreev(options->bt_devices);
 }
 
 int main(int argc, char* argv[])
@@ -58,13 +71,14 @@ int main(int argc, char* argv[])
     }
 
     BluezDBus::t* dbus = BluezDBus::create();
-    BluezDBus::add_device_mac_address(dbus, "04:98:F3:0D:0C:11");
     BluezDBus::init(dbus);
 
     GMainLoop* loop;
     loop = g_main_loop_new(NULL, FALSE);
 
     g_main_loop_run(loop);
+
+    desotoy_options(&options);
     g_main_loop_unref(loop);
     Cec::destory(cec_wrapper);
 
