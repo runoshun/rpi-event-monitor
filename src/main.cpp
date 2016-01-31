@@ -58,6 +58,7 @@ int main(int argc, char* argv[])
     }
 
     BluezDBus::t* dbus = BluezDBus::create();
+    BluezDBus::add_device_mac_address(dbus, "04_98_F3_0D_0C_11");
     BluezDBus::init(dbus);
 
     GMainLoop* loop;

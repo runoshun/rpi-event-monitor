@@ -35,9 +35,24 @@ namespace RpiEvtMon { namespace BluezDBus {
         std::cout << "on_device_disconnect" << std::endl;
     }
 
-    bool is_registered_device(GDBusProxy* proxy, std::vector<const char *> addrs)
+    bool is_registered_device(GDBusProxy* proxy, std::vector<const char *> &addrs)
     {
-        return true;
+        GVariant* variant = g_dbus_proxy_get_cached_property(proxy,"Address");
+        gsize len;
+        std::string dev_addr = g_variant_get_string(variant, &len);
+        std::cout << "proxy addr = " << dev_addr << std::endl;
+
+        bool found = false;
+        for(std::vector<const char*>::iterator it = addrs.begin(); it != addrs.end(); ++it)
+        {
+            if(dev_addr.find(*it) != std::string::npos) {
+                found = true;
+                break;
+            }
+        }
+
+        g_variant_unref(variant);
+        return found;
     }
 
     void on_properties_changed(GDBusProxy *proxy,
@@ -99,7 +114,11 @@ namespace RpiEvtMon { namespace BluezDBus {
         g_list_free(objects);
     }
 
-    void add_device_mac_address(t* t, const char* mac);
+    void add_device_mac_address(t* t, const char* mac)
+    {
+        t->mac_addresses.push_back(mac);
+    }
+
     void set_on_connected_command(t* t, const char* command);
     void set_on_disconnected_command(t* t, const char* command);
 
