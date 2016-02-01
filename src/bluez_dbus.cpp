@@ -25,7 +25,8 @@ namespace RpiEvtMon { namespace BluezDBus {
         delete t;
     }
 
-    bool is_registered_device(GDBusProxy* proxy, std::vector<const char *> &addrs)
+    static bool is_registered_device(GDBusProxy* proxy,
+                              std::vector<const char *> &addrs)
     {
         GVariant* variant = g_dbus_proxy_get_cached_property(proxy,"Address");
         gsize len;
@@ -43,12 +44,13 @@ namespace RpiEvtMon { namespace BluezDBus {
         g_variant_unref(variant);
 
         if(!found) {
-            std::cout << "connected unregistered device : " << dev_addr << std::endl;
+            g_info("connected unregistered device : %s", dev_addr.c_str());
         }
         return found;
     }
 
-    void run_command(t* t, gboolean is_connected)
+    static void run_command(t* t,
+                     gboolean is_connected)
     {
         const char* command;
         if(is_connected) {
@@ -61,15 +63,17 @@ namespace RpiEvtMon { namespace BluezDBus {
             GError *err;
             gboolean ret = g_spawn_command_line_async(command, &err);
             if(!ret) {
-                std::cout << "can't spawn command, " << err->message << std::endl;
+                g_error("can't spawn command '%s', ", command, err->message);
+                g_error_free(err);
             }
         }
     }
 
-    void on_properties_changed(GDBusProxy *proxy,
-                               GVariant   *changed_properties,
-                               GStrv       invalidated_properties,
-                               gpointer    user_data)
+    static void on_properties_changed(
+            GDBusProxy *proxy,
+            GVariant   *changed_properties,
+            GStrv       invalidated_properties,
+            gpointer    user_data)
     {
         t* bt = (t*) user_data;
 
@@ -107,10 +111,14 @@ namespace RpiEvtMon { namespace BluezDBus {
                     NULL,
                     NULL,
                     &err);
+        
+        if(err != NULL) {
+            
+        }
 
         GList* objects = g_dbus_object_manager_get_objects(bluez);
         for(GList* p = objects; p != NULL; p = p->next) {
-            GDBusObject* obj = (GDBusObject*)p->data;
+            GDBusObject* obj = static_cast<GDBusObject*>(p->data);
             GDBusInterface* idevice = g_dbus_object_get_interface(obj, "org.bluez.Device1");
             if(idevice != NULL) {
                 g_signal_connect(idevice, "g-properties-changed", G_CALLBACK(on_properties_changed), t);
@@ -118,6 +126,9 @@ namespace RpiEvtMon { namespace BluezDBus {
             g_object_unref(obj);
         }
         g_list_free(objects);
+        
+        g_object_unref(system_bus);
+        return true;
     }
 
     void add_device_mac_address(t* t, const char* mac)
@@ -125,7 +136,14 @@ namespace RpiEvtMon { namespace BluezDBus {
         t->mac_addresses.push_back(mac);
     }
 
-    void set_on_connected_command(t* t, const char* command);
-    void set_on_disconnected_command(t* t, const char* command);
+    void set_on_connected_command(t* t, const char* command)
+    {
+        t->on_connect_command = command;
+    }
+
+    void set_on_disconnected_command(t* t, const char* command)
+    {
+        t->on_disconnect_command = command;
+    }
 
 } } // namespace RpiEvtMon

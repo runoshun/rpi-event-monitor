@@ -1,9 +1,7 @@
 #include "cec_wrapper.h"
 #include "bluez_dbus.h"
 
-#include <cec.h>
 #include <glib.h>
-
 #include <iostream>
 
 using namespace RpiEvtMon;
@@ -59,28 +57,33 @@ int main(int argc, char* argv[])
     options_t options;
     parse_options(&argc, argv, &options);
 
+    if(options.verbose) {
+        g_setenv("G_MESSAGES_DEBUG","1",true);
+    }
+
     Cec::t* cec_wrapper = Cec::create();
     Cec::set_on_activated_command(cec_wrapper, options.on_cec_activated);
     Cec::set_on_deactivated_command(cec_wrapper, options.on_cec_deactivated);
-    if(options.verbose) {
-        Cec::set_log_level(cec_wrapper, CEC::CEC_LOG_ALL);
-    }
-
     if(!Cec::init(cec_wrapper)) {
         return 1;
     }
 
-    BluezDBus::t* dbus = BluezDBus::create();
-    BluezDBus::init(dbus);
+    BluezDBus::t* bluez_dbus = BluezDBus::create();
+    BluezDBus::set_on_connected_command(bluez_dbus, options.on_bt_connected);
+    BluezDBus::set_on_disconnected_command(bluez_dbus, options.on_bt_disconnected);
+    for(int i = 0; options.bt_devices[i] != NULL; ++i)
+    {
+        BluezDBus::add_device_mac_address(bluez_dbus, options.bt_devices[i]);
+    }
+    BluezDBus::init(bluez_dbus);
 
-    GMainLoop* loop;
-    loop = g_main_loop_new(NULL, FALSE);
-
+    GMainLoop* loop = g_main_loop_new(NULL, FALSE);
     g_main_loop_run(loop);
 
     desotoy_options(&options);
     g_main_loop_unref(loop);
     Cec::destory(cec_wrapper);
+    BluezDBus::destory(bluez_dbus);
 
     return 0;
 }

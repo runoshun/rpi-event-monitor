@@ -14,20 +14,17 @@ using namespace CEC;
 namespace RpiEvtMon { namespace Cec {
 
     typedef struct wrapper {
-        bool is_activated;
-        int log_level;
         const char * on_activated_command;
         const char * on_deactivated_command;
 
         ICECAdapter* adapter;
         const ICECCallbacks* callbacks;
         const libcec_configuration* config;
+
+        bool is_adapter_opened;
+        bool is_activated;
     } t;
 
-
-    bool activate(t* wrapper) {
-        wrapper->adapter->SetActiveSource(CEC_DEVICE_TYPE_PLAYBACK_DEVICE);
-    }
 
     bool is_activated(t* wrapper)
     {
@@ -42,11 +39,6 @@ namespace RpiEvtMon { namespace Cec {
     void set_on_deactivated_command(t* wrapper, const char * command)
     {
         wrapper->on_deactivated_command = command;
-    }
-
-    void set_log_level(t* wrapper, int log_level)
-    {
-        wrapper->log_level = log_level;
     }
 
     void cec_source_activated(void *cbParam, const cec_logical_address address, const uint8_t activated)
@@ -66,7 +58,8 @@ namespace RpiEvtMon { namespace Cec {
 
             GError* err;
             if(!g_spawn_command_line_async(command, &err)) {
-                std::cout << "spawning command '" << command << "' is failed." << std::endl;
+                g_error("spawning command '%s' is failed, %s", err->message);
+                g_error_free(err);
             }
         }
     }
@@ -76,31 +69,26 @@ namespace RpiEvtMon { namespace Cec {
         std::string strLevel;
         t* wrapper = (t*)cbParam;
 
-        if(!(wrapper->log_level & message.level)) {
-            return 0;
-        }
-
         switch (message.level)
         {
             case CEC_LOG_ERROR:
-                strLevel = "ERROR:   ";
+                g_error(message.message);
                 break;
             case CEC_LOG_WARNING:
-                strLevel = "WARNING: ";
+                g_warning(message.message);
                 break;
             case CEC_LOG_NOTICE:
-                strLevel = "NOTICE:  ";
+                g_info(message.message);
                 break;
             case CEC_LOG_TRAFFIC:
-                strLevel = "TRAFFIC: ";
+                g_debug("TRAFFIC:  %s", message.message);
                 break;
             case CEC_LOG_DEBUG:
-                strLevel = "DEBUG:   ";
+                g_debug("DEBUG:    %s", message.message);
                 break;
             default:
                 break;
         }
-        std::cout << strLevel << message.message << std::endl;
         return 0;
     }
 
@@ -127,7 +115,8 @@ namespace RpiEvtMon { namespace Cec {
 
         wrapper->adapter = LibCecInitialise(cec_config);
         if(!wrapper->adapter) {
-            std::cout << "can't initialize libcec." << std::endl;
+            g_error("can't initialize libcec.");
+            destory(wrapper);
             return false;
         }
 
@@ -137,17 +126,18 @@ namespace RpiEvtMon { namespace Cec {
         std::string port;
         uint8_t devicesFound = wrapper->adapter->FindAdapters(devices, 10, NULL);
         if(devicesFound <= 0) {
-            std::cout << "no device found." << std::endl;
-            UnloadLibCec(wrapper->adapter);
+            g_error("no device found.");
+            destory(wrapper);
             return false;
         }
         port = devices[0].comm;
 
         if(!wrapper->adapter->Open(port.c_str())) {
-            std::cout << "can't open cec adapter." << std::endl;
-            UnloadLibCec(wrapper->adapter);
+            g_error("can't open cec adapter.");
+            destory(wrapper);
             return false;
         }
+        wrapper->is_adapter_opened = true;
 
         return true;
     }
@@ -159,14 +149,17 @@ namespace RpiEvtMon { namespace Cec {
         wrapper->on_deactivated_command = NULL;
         wrapper->callbacks = NULL;
         wrapper->config = NULL;
-        wrapper->log_level = CEC_LOG_ERROR | CEC_LOG_WARNING;
+        wrapper->is_activated = false;
+        wrapper->is_adapter_opened = false;
 
         return wrapper;
     }
 
     void destory(t* wrapper) {
         if(wrapper->adapter) {
-            wrapper->adapter->Close();
+            if(wrapper->is_adapter_opened) {
+                wrapper->adapter->Close();
+            }
             UnloadLibCec(wrapper->adapter);
             wrapper->adapter = NULL;
         }
