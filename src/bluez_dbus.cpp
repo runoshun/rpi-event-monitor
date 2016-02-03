@@ -25,13 +25,13 @@ namespace RpiEvtMon { namespace BluezDBus {
         delete t;
     }
 
-    static bool is_registered_device(GDBusProxy* proxy,
-                              std::vector<const char *> &addrs)
+    static bool is_registered_device(GDBusProxy* proxy, std::vector<const char *> &addrs)
     {
         GVariant* variant = g_dbus_proxy_get_cached_property(proxy,"Address");
         gsize len;
         std::string dev_addr = g_variant_get_string(variant, &len);
 
+        g_debug("BluezDBus: is_registered_device(), device = %s", dev_addr.c_str());
         bool found = false;
         for(std::vector<const char*>::iterator it = addrs.begin(); it != addrs.end(); ++it)
         {
@@ -49,10 +49,10 @@ namespace RpiEvtMon { namespace BluezDBus {
         return found;
     }
 
-    static void run_command(t* t,
-                     gboolean is_connected)
+    static void run_command(t* t, gboolean is_connected)
     {
         const char* command;
+        g_debug("BluezDBus: run_command(), is_connected = %b", is_connected);
         if(is_connected) {
             command = t->on_connect_command;
         }
@@ -83,12 +83,12 @@ namespace RpiEvtMon { namespace BluezDBus {
             const gchar *key;
             GVariant *value;
 
+            g_debug("BluezDBus: on_properties_changed()");
             g_variant_iter_init (&iter, changed_properties);
             while (g_variant_iter_loop (&iter, "{sv}", &key, &value)) {
                 if(g_strcmp0("Connected", key) != 0) {
                     continue;
                 }
-
                 bool registered = is_registered_device(proxy, bt->mac_addresses);
                 if(registered) {
                     run_command(bt, g_variant_get_boolean(value));
@@ -133,6 +133,7 @@ namespace RpiEvtMon { namespace BluezDBus {
 
     void add_device_mac_address(t* t, const char* mac)
     {
+        g_debug("BluezDBus: mac address '%s' is added", mac);
         t->mac_addresses.push_back(mac);
     }
 
