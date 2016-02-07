@@ -19,4 +19,8 @@ pkg_check_modules (GIO2 gio-2.0)
 
 include_directories(${INCLUDE_DIRS} ${CEC_INCLUDE_DIRS} ${GLIB2_INCLUDE_DIRS} ${GIO2_INCLUDE_DIRS})
 add_executable(rpi-event-monitor ${SOURCES})
-target_link_libraries(rpi-event-monitor ${CEC_LIBRARIES} ${GLIB2_LIBRARIES} ${GIO2_LIBRARIES} dl)
+
+# set fixed cec and p8-platform library due to cmake bug?
+#target_link_libraries(rpi-event-monitor ${CEC_LIBRARIES} ${GLIB2_LIBRARIES} ${GIO2_LIBRARIES} dl)
+target_link_libraries(rpi-event-monitor cec p8-platform ${GLIB2_LIBRARIES} ${GIO2_LIBRARIES} dl)
+
