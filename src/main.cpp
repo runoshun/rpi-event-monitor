@@ -31,6 +31,7 @@ gboolean parse_options(int* argc, char* argv[], options_t* options)
     options->on_cec_deactivated = NULL;
     options->on_bt_connected = NULL;
     options->on_bt_disconnected = NULL;
+    options->bt_devices = NULL;
     options->verbose = FALSE;
 
     GError *error = NULL;
@@ -54,29 +55,40 @@ void desotoy_options(options_t* options)
 
 int main(int argc, char* argv[])
 {
+    g_debug("Parsing options ...");
     options_t options;
     parse_options(&argc, argv, &options);
 
     if(options.verbose) {
-        g_setenv("G_MESSAGES_DEBUG","1",true);
+        g_setenv("G_MESSAGES_DEBUG","all",true);
     }
 
+    g_debug("Create Cec instance...");
     Cec::t* cec_wrapper = Cec::create();
+    g_debug("Setting up Cec options ...");
     Cec::set_on_activated_command(cec_wrapper, options.on_cec_activated);
     Cec::set_on_deactivated_command(cec_wrapper, options.on_cec_deactivated);
+    g_debug("Initialize Cec ...");
     if(!Cec::init(cec_wrapper)) {
         return 1;
     }
 
+    g_debug("Create BluezDBus instance...");
     BluezDBus::t* bluez_dbus = BluezDBus::create();
+    g_debug("Setting up BluezDBus options ...");
     BluezDBus::set_on_connected_command(bluez_dbus, options.on_bt_connected);
     BluezDBus::set_on_disconnected_command(bluez_dbus, options.on_bt_disconnected);
-    for(int i = 0; options.bt_devices[i] != NULL; ++i)
-    {
-        BluezDBus::add_device_mac_address(bluez_dbus, options.bt_devices[i]);
+    g_debug("Setting up BluezDBus bluetooth addresses ...");
+    if(options.bt_devices != NULL) {
+        for(int i = 0; options.bt_devices[i] != NULL; ++i)
+        {
+            BluezDBus::add_device_mac_address(bluez_dbus, options.bt_devices[i]);
+        }
     }
+    g_debug("Initialize BluezDBus ...");
     BluezDBus::init(bluez_dbus);
 
+    g_debug("Enter main loop ...");
     GMainLoop* loop = g_main_loop_new(NULL, FALSE);
     g_main_loop_run(loop);
 
