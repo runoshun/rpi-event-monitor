@@ -12,17 +12,7 @@ namespace RpiEvtMon { namespace BluezDBus {
         std::vector<const char *> mac_addresses;
         const char* on_connect_command;
         const char* on_disconnect_command;
-
-        long on_device_connected_handler_id;
-        GDBusObjectManager* bluez;
     } t;
-
-    typedef void (*object_proc)(t* bt, GDBusObject* obj);
-    typedef void (*key_val_proc)(t* bt, GDBusProxy* proxy, const gchar *key, GVariant *value);
-
-    // prototype decl
-    static void connect_to_device_signal(t* bt, GDBusObject* obj);
-    static void foreach_objects(t* bt, object_proc proc);
 
     t* create()
     {
@@ -32,7 +22,6 @@ namespace RpiEvtMon { namespace BluezDBus {
 
     void destory(t* t)
     {
-        if(t->bluez) g_object_unref(t->bluez);
         delete t;
     }
 
@@ -80,112 +69,49 @@ namespace RpiEvtMon { namespace BluezDBus {
         }
     }
 
-    static void foreach_variant_key_value(GVariant* properties, t* bt, GDBusProxy* proxy, key_val_proc proc)
-    {
-        g_debug("BluezDBus: foreach_variant_key_value();");
-        if (g_variant_n_children (properties) > 0)
-        {
-            GVariantIter iter;
-            const gchar *key;
-            GVariant *value;
-
-            g_variant_iter_init (&iter, properties);
-            while (g_variant_iter_loop (&iter, "{sv}", &key, &value)) {
-                proc(bt, proxy, key, value);
-            }
-        }
-    }
-
-    static void run_command_if_connected(t* bt, GDBusProxy* proxy, const gchar* key, GVariant* value)
-    {
-        g_debug("BluezDBus: run_command_if_connected();");
-        if(g_strcmp0("Connected", key) != 0) {
-            return;
-        }
-        bool registered = is_registered_device(proxy, bt->mac_addresses);
-        if(registered) {
-            run_command(bt, g_variant_get_boolean(value));
-        }
-    }
-
-    static void on_device_properties_changed(
             GDBusProxy *proxy,
             GVariant   *changed_properties,
             GStrv       invalidated_properties,
             gpointer    user_data)
     {
-        g_debug("BluezDBus: on_device_properties_changed()");
         t* bt = (t*) user_data;
-        foreach_variant_key_value(changed_properties, bt, proxy, run_command_if_connected);
-    }
 
-
-    static void connect_to_device_if_powered(t* bt, GDBusProxy* proxy, const gchar* key, GVariant* value)
-    {
-        g_debug("BluezDBus: connect_to_device_if_powered();");
-        if(g_strcmp0("Powered", key) != 0) {
-            return;
-        }
-        if(g_variant_get_boolean(value)) {
-            foreach_objects(bt, connect_to_device_signal);
-        }
-    }
-
-    static void on_adapter_properties_changed(
-            GDBusProxy *proxy,
-            GVariant   *changed_properties,
-            GStrv       invalidated_properties,
-            gpointer    user_data)
-    {
-        g_debug("BluezDBus: on_adapter_properties_changed()");
-        t* bt = (t*)user_data;
-        foreach_variant_key_value(changed_properties, bt, proxy, connect_to_device_if_powered);
-    }
-
-    static void foreach_objects(t* bt, object_proc proc) {
-        GList* objects = g_dbus_object_manager_get_objects(bt->bluez);
-
-        for(GList* p = objects; p != NULL; p = p->next) {
-            GDBusObject* obj = static_cast<GDBusObject*>(p->data);
-            proc(bt, obj);
-            g_object_unref(obj);
-        }
-
-        if(objects) g_list_free(objects);
-    }
-
-    static void connect_to_device_signal(t* t, GDBusObject* obj) {
-        GDBusInterface* idevice = g_dbus_object_get_interface(obj, "org.bluez.Device1");
-        if(idevice != NULL) {
-            t->on_device_connected_handler_id =
-                    g_signal_connect(idevice, "g-properties-changed", G_CALLBACK(on_device_properties_changed), t);
-        }
-    }
-
-    static void connect_to_adapter_signal(t* t, GDBusObject* obj) {
-        GDBusInterface* idevice = g_dbus_object_get_interface(obj, "org.bluez.Adapter1");
-        if(idevice != NULL) {
-            g_signal_connect(idevice, "g-properties-changed", G_CALLBACK(on_adapter_properties_changed), t);
         }
     }
 
     bool init(t* t)
     {
         GError* err = NULL;
-        t->bluez = g_dbus_object_manager_client_new_for_bus_sync(
-                    G_BUS_TYPE_SYSTEM,
+        GDBusConnection* system_bus = g_bus_get_sync(G_BUS_TYPE_SYSTEM, NULL, &err);
+        GDBusObjectManager* bluez = g_dbus_object_manager_client_new_sync(
+                    system_bus,
                     G_DBUS_OBJECT_MANAGER_CLIENT_FLAGS_NONE,
-                    "org.bluez", "/",
-                    NULL, NULL, NULL, NULL, &err);
+                    "org.bluez",
+                    "/",
+                    NULL,
+                    NULL,
+                    NULL,
+                    NULL,
+                    &err);
+
         if(err != NULL) {
             g_error("BluezDBus: can't get bleuz object manager, %s", err->message);
             g_object_unref(err);
             return false;
         }
 
-        foreach_objects(t, connect_to_device_signal);
-        foreach_objects(t, connect_to_adapter_signal);
+        GList* objects = g_dbus_object_manager_get_objects(bluez);
+        for(GList* p = objects; p != NULL; p = p->next) {
+            GDBusObject* obj = static_cast<GDBusObject*>(p->data);
+            GDBusInterface* idevice = g_dbus_object_get_interface(obj, "org.bluez.Device1");
+            if(idevice != NULL) {
+                g_signal_connect(idevice, "g-properties-changed", G_CALLBACK(on_properties_changed), t);
+            }
+            g_object_unref(obj);
+        }
+        g_list_free(objects);
 
+        g_object_unref(system_bus);
         return true;
     }
 
