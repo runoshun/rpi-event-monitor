@@ -52,7 +52,7 @@ namespace RpiEvtMon { namespace BluezDBus {
     static void run_command(t* t, gboolean is_connected)
     {
         const char* command;
-        g_debug("BluezDBus: run_command(), is_connected = %d", is_connected);
+        g_debug("BluezDBus: run_command(), is_connected = %b", is_connected);
         if(is_connected) {
             command = t->on_connect_command;
         }
@@ -69,6 +69,7 @@ namespace RpiEvtMon { namespace BluezDBus {
         }
     }
 
+    static void on_properties_changed(
             GDBusProxy *proxy,
             GVariant   *changed_properties,
             GStrv       invalidated_properties,
@@ -76,6 +77,23 @@ namespace RpiEvtMon { namespace BluezDBus {
     {
         t* bt = (t*) user_data;
 
+        if (g_variant_n_children (changed_properties) > 0)
+        {
+            GVariantIter iter;
+            const gchar *key;
+            GVariant *value;
+
+            g_debug("BluezDBus: on_properties_changed()");
+            g_variant_iter_init (&iter, changed_properties);
+            while (g_variant_iter_loop (&iter, "{sv}", &key, &value)) {
+                if(g_strcmp0("Connected", key) != 0) {
+                    continue;
+                }
+                bool registered = is_registered_device(proxy, bt->mac_addresses);
+                if(registered) {
+                    run_command(bt, g_variant_get_boolean(value));
+                }
+            }
         }
     }
 
@@ -93,11 +111,9 @@ namespace RpiEvtMon { namespace BluezDBus {
                     NULL,
                     NULL,
                     &err);
-
+        
         if(err != NULL) {
-            g_error("BluezDBus: can't get bleuz object manager, %s", err->message);
-            g_object_unref(err);
-            return false;
+            
         }
 
         GList* objects = g_dbus_object_manager_get_objects(bluez);
@@ -110,7 +126,7 @@ namespace RpiEvtMon { namespace BluezDBus {
             g_object_unref(obj);
         }
         g_list_free(objects);
-
+        
         g_object_unref(system_bus);
         return true;
     }
