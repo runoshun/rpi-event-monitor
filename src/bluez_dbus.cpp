@@ -13,6 +13,7 @@ namespace RpiEvtMon { namespace BluezDBus {
         const char* on_connect_command;
         const char* on_disconnect_command;
 
+        long on_device_connected_handler_id;
         GDBusObjectManager* bluez;
     } t;
 
@@ -62,7 +63,7 @@ namespace RpiEvtMon { namespace BluezDBus {
     static void run_command(t* t, gboolean is_connected)
     {
         const char* command;
-        g_debug("BluezDBus: run_command(), is_connected = %b", is_connected);
+        g_debug("BluezDBus: run_command(), is_connected = %d", is_connected);
         if(is_connected) {
             command = t->on_connect_command;
         }
@@ -156,7 +157,8 @@ namespace RpiEvtMon { namespace BluezDBus {
     static void connect_to_device_signal(t* t, GDBusObject* obj) {
         GDBusInterface* idevice = g_dbus_object_get_interface(obj, "org.bluez.Device1");
         if(idevice != NULL) {
-            g_signal_connect(idevice, "g-properties-changed", G_CALLBACK(on_device_properties_changed), t);
+            t->on_device_connected_handler_id =
+                    g_signal_connect(idevice, "g-properties-changed", G_CALLBACK(on_device_properties_changed), t);
         }
     }
 
