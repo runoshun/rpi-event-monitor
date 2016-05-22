@@ -9,8 +9,7 @@ namespace RpiEvtMon { namespace Cec {
     bool activate(t* wrapper);
     bool is_activated(t* wrapper);
 
-    void set_on_activated_command(t* wrapper, const char * command);
-    void set_on_deactivated_command(t* wrapper, const char * command);
+    void set_command(t* wrapper, const char * command);
     void set_log_level(t* wrapper, int log_level);
 
 } } // namespace RpiEvtMon:: Cec

@@ -26,8 +26,7 @@ namespace RpiEvtMon { namespace Cec {
     }
 
     typedef struct wrapper {
-        const char * on_activated_command;
-        const char * on_deactivated_command;
+        const char * command;
 
         ICECAdapter* adapter;
         bool is_adapter_opened;
@@ -37,37 +36,31 @@ namespace RpiEvtMon { namespace Cec {
         GHashTable* routes;
     } t;
 
-    void set_on_activated_command(t* wrapper, const char * command)
+    void set_command(t* wrapper, const char * command)
     {
-        wrapper->on_activated_command = command;
-    }
-
-    void set_on_deactivated_command(t* wrapper, const char * command)
-    {
-        wrapper->on_deactivated_command = command;
+        wrapper->command = command;
     }
 
     void fire_command(t* wrapper, gint address, bool activated)
     {
-        char const * base;
         char const * which;
         if(activated) {
-            base = wrapper->on_activated_command;
             which = "activate";
         }
         else {
-            base = wrapper->on_deactivated_command;
             which = "deactivate";
         }
 
-        int len = strlen(base) + 20;
-        char command[len];
-        snprintf(command, len, "%s %s %04x", base, which, address);
+        if(wrapper->command != NULL) {
+            int len = strlen(wrapper->command) + 20;
+            char command[len];
+            snprintf(command, len, "%s %s %04x", wrapper->command, which, address);
 
-        GError* err;
-        if(!g_spawn_command_line_async(command, &err)) {
-            g_error("spawning command '%s' is failed, %s", command, err->message);
-            g_error_free(err);
+            GError* err;
+            if(!g_spawn_command_line_async(command, &err)) {
+                g_error("spawning command '%s' is failed, %s", command, err->message);
+                g_error_free(err);
+            }
         }
     }
 
@@ -99,38 +92,48 @@ namespace RpiEvtMon { namespace Cec {
         return 0;
     }
 
+    void deactivate_all(t* wrapper, gpointer active_addr) {
+        GHashTableIter iter;
+        gpointer k, v;
+        g_hash_table_iter_init (&iter, wrapper->routes);
+        while (g_hash_table_iter_next (&iter, &k, &v)) {
+            route_t* r = (route_t*)v;
+            if(k == active_addr || !r->is_activated) {
+                continue;
+            }
+            else {
+                g_debug("cec_command : fire deactivate command. addr = %04x", GPOINTER_TO_INT(k));
+                r->is_activated = false;
+                fire_command(wrapper, GPOINTER_TO_INT(k), false);
+            }
+        }
+    }
+
     int cec_command(void *cbParam, const cec_command cmd) {
+        t* wrapper = (t*)cbParam;
+
         if (cmd.opcode == CEC_OPCODE_ROUTING_CHANGE &&
             cmd.parameters.size == 4)
         {
-            t* wrapper = (t*)cbParam;
+            g_debug("cec_command : CEC_OPCODE_ROUTING_CHANGE");
+
             gint addr = (cmd.parameters[2] << 8 | (gint)cmd.parameters[3]);
             gpointer key = GINT_TO_POINTER(addr);
 
-            route_t* route;
-            if(g_hash_table_contains(wrapper->routes, key)) {
-                route = (route_t*)g_hash_table_lookup(wrapper->routes, key);
-            }
-            else {
+            route_t* route = (route_t*)g_hash_table_lookup(wrapper->routes, key);
+            if(route == NULL) {
                 route = create_route();
                 g_hash_table_insert(wrapper->routes, key, route);
             }
 
+            g_debug("cec_command : fire activate command. addr = %04x", addr);
             route->is_activated = true;
+            fire_command(wrapper, addr, true);
 
-            GHashTableIter iter;
-            gpointer k, v;
-            g_hash_table_iter_init (&iter, wrapper->routes);
-            while (g_hash_table_iter_next (&iter, &k, &v)) {
-                route_t* r = (route_t*)v;
-                if(k == key || !r->is_activated) {
-                    continue;
-                }
-                else {
-                    r->is_activated = false;
-
-                }
-            }
+            deactivate_all(wrapper, key);
+        }
+        else if (cmd.opcode == CEC_OPCODE_ACTIVE_SOURCE) {
+            deactivate_all(wrapper, 0);
         }
 
         return 1;
@@ -189,13 +192,12 @@ namespace RpiEvtMon { namespace Cec {
     t* create()
     {
         t* wrapper = new t;
-        wrapper->on_activated_command = NULL;
-        wrapper->on_deactivated_command = NULL;
+        wrapper->command = NULL;
         wrapper->callbacks = NULL;
         wrapper->config = NULL;
         wrapper->is_adapter_opened = false;
 
-        wrapper->routes = g_hash_table_new(g_int_hash, g_int_equal);
+        wrapper->routes = g_hash_table_new(g_direct_hash, g_direct_equal);
 
         return wrapper;
     }

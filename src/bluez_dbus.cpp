@@ -1,5 +1,8 @@
 #include "bluez_dbus.h"
 
+#include <string.h>
+#include <stdio.h>
+
 #include <glib.h>
 #include <gio/gio.h>
 
@@ -10,13 +13,13 @@ namespace RpiEvtMon { namespace BluezDBus {
 
     typedef struct t {
         std::vector<const char *> mac_addresses;
-        const char* on_connect_command;
-        const char* on_disconnect_command;
+        const char* command;
     } t;
 
     t* create()
     {
         t* bt = new t;
+        bt->command = NULL;
         return bt;
     }
 
@@ -25,11 +28,18 @@ namespace RpiEvtMon { namespace BluezDBus {
         delete t;
     }
 
-    static bool is_registered_device(GDBusProxy* proxy, std::vector<const char *> &addrs)
-    {
+    static std::string get_device_addr(GDBusProxy* proxy) {
         GVariant* variant = g_dbus_proxy_get_cached_property(proxy,"Address");
         gsize len;
         std::string dev_addr = g_variant_get_string(variant, &len);
+
+        return dev_addr;
+    }
+
+    static bool is_registered_device(GDBusProxy* proxy, std::vector<const char *> &addrs)
+    {
+        GVariant* variant = g_dbus_proxy_get_cached_property(proxy,"Address");
+        std::string dev_addr = get_device_addr(proxy);
 
         g_debug("BluezDBus: is_registered_device(), device = %s", dev_addr.c_str());
         bool found = false;
@@ -49,17 +59,23 @@ namespace RpiEvtMon { namespace BluezDBus {
         return found;
     }
 
-    static void run_command(t* t, gboolean is_connected)
+    static void run_command(t* t, gboolean is_connected, const char* dev)
     {
-        const char* command;
+        const char* which;
         g_debug("BluezDBus: run_command(), is_connected = %b", is_connected);
-        if(is_connected) {
-            command = t->on_connect_command;
-        }
-        else {
-            command = t->on_disconnect_command;
-        }
-        if(command != NULL) {
+
+        if(t->command != NULL) {
+            if(is_connected) {
+                which = "connected";
+            }
+            else {
+                which = "disconnected";
+            }
+
+            int len = strlen(t->command) + 50;
+            char command[len];
+            snprintf(command, len, "%s %s %s", t->command, which, dev);
+
             GError *err;
             gboolean ret = g_spawn_command_line_async(command, &err);
             if(!ret) {
@@ -91,7 +107,7 @@ namespace RpiEvtMon { namespace BluezDBus {
                 }
                 bool registered = is_registered_device(proxy, bt->mac_addresses);
                 if(registered) {
-                    run_command(bt, g_variant_get_boolean(value));
+                    run_command(bt, g_variant_get_boolean(value), get_device_addr(proxy).c_str());
                 }
             }
         }
@@ -111,9 +127,8 @@ namespace RpiEvtMon { namespace BluezDBus {
                     NULL,
                     NULL,
                     &err);
-        
+
         if(err != NULL) {
-            
         }
 
         GList* objects = g_dbus_object_manager_get_objects(bluez);
@@ -126,7 +141,7 @@ namespace RpiEvtMon { namespace BluezDBus {
             g_object_unref(obj);
         }
         g_list_free(objects);
-        
+
         g_object_unref(system_bus);
         return true;
     }
@@ -137,14 +152,9 @@ namespace RpiEvtMon { namespace BluezDBus {
         t->mac_addresses.push_back(mac);
     }
 
-    void set_on_connected_command(t* t, const char* command)
+    void set_command(t* t, const char* command)
     {
-        t->on_connect_command = command;
-    }
-
-    void set_on_disconnected_command(t* t, const char* command)
-    {
-        t->on_disconnect_command = command;
+        t->command = command;
     }
 
 } } // namespace RpiEvtMon
